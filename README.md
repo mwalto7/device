@@ -4,7 +4,7 @@ Device is a pure Go library for configuring network devices.
 
 Full documentation: [GoDoc](https://godoc.org/github.com/mwalto7/device/device)
 
-`go get "github.com/mwalto7/device/device"`
+`go get -u github.com/mwalto7/device/device`
 
 Example:
 
@@ -31,9 +31,6 @@ func main() {
     if err != nil {
         log.Fatalf("Failed to run: %v\n", err)
     }
-
-    // Read all the contents of the session.
-    contents, _ := ioutil.ReadAll(output)
-    fmt.Println(string(contents))
+    fmt.Println(string(output))
 }
 ```

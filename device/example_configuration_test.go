@@ -28,8 +28,7 @@ import (
 )
 
 func ExampleDevice_SendCmds() {
-	// Establish an SSH connection to a device and defer
-	// closing the connection.
+	// Establish an SSH connection to a network device.
 	netDev, err := device.Dial("127.0.0.1", "22", "user", "password")
 	if err != nil {
 		log.Fatalf("Failed to connect: %v\n", err)
