@@ -4,7 +4,7 @@ Device is a pure Go library for configuring network devices.
 
 Full documentation: [GoDoc](https://godoc.org/github.com/mwalto7/device/device)
 
-`import "github.com/mwalto7/device/device"`
+`go get "github.com/mwalto7/device/device"`
 
 Example:
 
