@@ -22,10 +22,9 @@
 package device_test
 
 import (
+	"fmt"
 	"github.com/mwalto7/device/device"
 	"log"
-	"fmt"
-	"io/ioutil"
 )
 
 func ExampleDevice_SendCmds() {
@@ -42,8 +41,5 @@ func ExampleDevice_SendCmds() {
 	if err != nil {
 		log.Fatalf("Failed to run: %v\n", err)
 	}
-
-	// Read all the contents of the session.
-	contents, _ := ioutil.ReadAll(output)
-	fmt.Println(string(contents))
+	fmt.Println(string(output))
 }

@@ -24,8 +24,10 @@
 package device
 
 import (
+	"fmt"
 	"golang.org/x/crypto/ssh"
 	"io"
+	"io/ioutil"
 	"net"
 	"time"
 )
@@ -70,7 +72,7 @@ func Dial(host, port, user, password string) (*Device, error) {
 // If the remote commands wait for more than 10 seconds,
 // the session will be terminated. SendCmds is safe to
 // use concurrently.
-func (d *Device) SendCmds(cmds ...string) (io.Reader, error) {
+func (d *Device) SendCmds(cmds ...string) ([]byte, error) {
 	// Create a new session
 	session, err := d.NewSession()
 	if err != nil {
@@ -96,9 +98,21 @@ func (d *Device) SendCmds(cmds ...string) (io.Reader, error) {
 			return nil, err
 		}
 	}
-	session.Wait()
 
-	return io.MultiReader(stdout, stderr), nil
+	// Wait for remote commands to exit or timeout.
+	done := make(chan error, 1)
+	go func() {
+		done <- session.Wait()
+	}()
+	timeout := time.After(10 * time.Second)
+	for {
+		select {
+		case <-done:
+			return ioutil.ReadAll(io.MultiReader(stdout, stderr))
+		case <-timeout:
+			return nil, fmt.Errorf("session timed out")
+		}
+	}
 }
 
 // Close closes the SSH client connection.
