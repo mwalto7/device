@@ -35,9 +35,7 @@ import (
 // Device represents a network device that can be
 // configured over SSH.
 type Device struct {
-	*ssh.Client        // the underlying SSH client
-	user        string // username for device login
-	pass        string // password for device login
+	*ssh.Client // the underlying SSH client
 }
 
 // Dial returns an SSH client connection to the specified
@@ -63,7 +61,7 @@ func Dial(host, port, user, password string) (*Device, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Device{client, user, password}, nil
+	return &Device{client}, nil
 }
 
 // SendCmds starts an SSH session, writes `cmds` to its
