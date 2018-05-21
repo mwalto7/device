@@ -105,7 +105,7 @@ func (d *Device) SendCmds(cmds ...string) (io.Reader, error) {
 	timeout := time.After(10 * time.Second)
 	for {
 		select {
-		case err := <-done:
+		case <-done:
 			return io.MultiReader(stdout, stderr), nil
 		case <-timeout:
 			return nil, session.Signal(ssh.SIGINT)
