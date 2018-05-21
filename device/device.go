@@ -24,7 +24,6 @@
 package device
 
 import (
-	"fmt"
 	"golang.org/x/crypto/ssh"
 	"io"
 	"net"
