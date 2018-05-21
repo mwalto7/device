@@ -28,7 +28,7 @@ import (
 	"io/ioutil"
 )
 
-func ExampleConfiguration() {
+func ExampleDevice_SendCmds() {
 	// Establish an SSH connection to a device and defer
 	// closing the connection.
 	netDev, err := device.Dial("127.0.0.1", "22", "user", "password")
