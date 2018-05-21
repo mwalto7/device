@@ -97,21 +97,9 @@ func (d *Device) SendCmds(cmds ...string) (io.Reader, error) {
 			return nil, err
 		}
 	}
+	session.Wait()
 
-	// Wait for commands to exit or timeout
-	done := make(chan error, 1)
-	go func() {
-		done <- session.Wait()
-	}()
-	timeout := time.After(10 * time.Second)
-	for {
-		select {
-		case <-done:
-			return io.MultiReader(stdout, stderr), nil
-		case <-timeout:
-			return nil, fmt.Errorf("%s session timed out", d.RemoteAddr())
-		}
-	}
+	return io.MultiReader(stdout, stderr), nil
 }
 
 // Close closes the SSH client connection.
