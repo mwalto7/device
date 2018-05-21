@@ -108,7 +108,7 @@ func (d *Device) SendCmds(cmds ...string) (io.Reader, error) {
 		case <-done:
 			return io.MultiReader(stdout, stderr), nil
 		case <-timeout:
-			return nil, session.Signal(ssh.SIGINT)
+			return nil, fmt.Errorf("%s session timed out", d.RemoteAddr())
 		}
 	}
 }
