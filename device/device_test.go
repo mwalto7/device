@@ -18,14 +18,36 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// Package device_tests contains tests and examples for the device package.
+// Package device_test contains tests, benchmarks, and examples for package
+// device.
 package device_test
 
 import (
+	"testing"
+	"log"
 	"fmt"
 	"github.com/mwalto7/device/device"
-	"log"
 )
+
+func TestDial(t *testing.T) {
+	// TODO: Test the Dial function.
+}
+
+func TestDevice_SendCmds(t *testing.T) {
+	// TODO: Test the Device.SendCmds method.
+}
+
+func TestDevice_Close(t *testing.T) {
+	// TODO: Test the Device.Close method.
+}
+
+func BenchmarkDial(b *testing.B) {
+	// TODO: Benchmark Dial function.
+}
+
+func BenchmarkDevice_SendCmds(b *testing.B) {
+	// TODO: Benchmark Device.SendCmds method.
+}
 
 func ExampleDevice_SendCmds() {
 	// Establish an SSH connection to a network device.
@@ -36,7 +58,8 @@ func ExampleDevice_SendCmds() {
 	defer netDev.Close()
 
 	// Send configuration commands and capture the output.
-	output, err := netDev.SendCmds("conf t", "int Gi1/0/1", "description hello_world")
+	cmds := []string{"conf t", "int Gi1/0/1", "description hello_world", "exit", "exit"}
+	output, err := netDev.SendCmds(cmds...)
 	if err != nil {
 		log.Fatalf("Failed to run: %v\n", err)
 	}

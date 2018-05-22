@@ -19,8 +19,9 @@
 // THE SOFTWARE.
 
 // Package device implements an SSH client for configuring network devices.
-// It defines a type, Device, with methods for sending configuration commands
-// and retrieving the output of the device's stdout and stderr.
+// It defines a type, Device, with methods for establishing an SSH connection,
+// sending configuration commands, and retrieving the contents of the device's
+// standard output and standard error.
 package device
 
 import (
@@ -66,10 +67,10 @@ func Dial(host, port, user, password string) (*Device, error) {
 
 // SendCmds starts an SSH session, writes `cmds` to its
 // standard input, waits for the remote commands to exit,
-// then returns its standard output and standard error pipes.
-// If the remote commands wait for more than 10 seconds,
-// the session will be terminated. SendCmds is safe to
-// use concurrently.
+// then returns the contents of standard output and
+// standard error.  If the remote commands wait for more
+// than 10 seconds, the session will be terminated.
+// SendCmds is safe to use concurrently.
 func (d *Device) SendCmds(cmds ...string) ([]byte, error) {
 	// Create a new session
 	session, err := d.NewSession()
