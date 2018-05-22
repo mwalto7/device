@@ -60,7 +60,7 @@ func Dial(host, port, user, password string) (*Device, error) {
 	// Establish an SSH connection to the device.
 	client, err := ssh.Dial("tcp", net.JoinHostPort(host, port), config)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to dial: %v", err)
 	}
 	return &Device{client}, nil
 }
@@ -75,38 +75,39 @@ func (d *Device) SendCmds(cmds ...string) ([]byte, error) {
 	// Create a new session
 	session, err := d.NewSession()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create session: %v", err)
 	}
 	defer session.Close()
 
 	// Create pipes to stdin, stdout, and stderr
 	stdin, stdout, stderr, err := setIO(session)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to setup IO: %v", err)
 	}
 	defer stdin.Close()
 
 	// Start the remote shell
 	if err := startShell(session); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to start remote shell: %v", err)
 	}
 
 	// Write the commands to stdin
 	for _, cmd := range cmds {
 		if _, err := io.WriteString(stdin, cmd+"\n"); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to run: %v", err)
 		}
 	}
 
 	// Wait for remote commands to exit or timeout.
-	done := make(chan error, 1)
+	exit := make(chan error, 1)
 	go func() {
-		done <- session.Wait()
+		exit <- session.Wait()
 	}()
 	timeout := time.After(10 * time.Second)
 	for {
 		select {
-		case <-done:
+		case <-exit:
+			// TODO: Handle error value of exit channel.
 			return ioutil.ReadAll(io.MultiReader(stdout, stderr))
 		case <-timeout:
 			return nil, fmt.Errorf("session timed out")
