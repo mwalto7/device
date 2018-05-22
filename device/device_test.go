@@ -27,6 +27,7 @@ import (
 	"log"
 	"fmt"
 	"github.com/mwalto7/device/device"
+	"sync"
 )
 
 func TestDial(t *testing.T) {
@@ -64,4 +65,41 @@ func ExampleDevice_SendCmds() {
 		log.Fatalf("Failed to run: %v\n", err)
 	}
 	fmt.Println(string(output))
+}
+
+func ExampleDevice_SendCmdsConcurrent() {
+	// The hosts to configure and the commands to run on each host.
+	var hosts, cmds []string
+
+	// Username and password for device login.
+	var user, pass string
+
+	// Channel of the configuration results.
+	results := make(chan string, len(hosts))
+
+	// Create a WaitGroup to wait for all device sessions to exit
+	// or timeout before closing the results channel.
+	var wg sync.WaitGroup
+	for _, host := range hosts {
+		wg.Add(1)
+		go func(host string, results chan<- string, wg *sync.WaitGroup) {
+			defer wg.Done()
+
+			// Establish an SSH connection to a network device.
+			netdev, _ := device.Dial(host, "22", user, pass)
+			defer netdev.Close()
+
+			// Send the configuration commands to the device and
+			// send the output to the results channel.
+			output, _ := netdev.SendCmds(cmds...)
+			results <- string(output)
+		}(host, results, &wg)
+	}
+	wg.Wait()
+	close(results)
+
+	// Print the results.
+	for res := range results {
+		fmt.Println(res)
+	}
 }
