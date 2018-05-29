@@ -88,7 +88,7 @@ func (d *Device) SendCmds(cmds ...string) ([]byte, error) {
 
 	// Start the remote shell
 	if err := startShell(session); err != nil {
-		return nil, fmt.Errorf("failed to start remote shell: %v", err)
+		return nil, err
 	}
 
 	// Write the commands to stdin
@@ -145,7 +145,10 @@ func startShell(session *ssh.Session) error {
 		ssh.TTY_OP_ISPEED: 14400, // input speed: 14.4k baud
 		ssh.TTY_OP_OSPEED: 14400, // output speed: 14.4k baud
 	}); err != nil {
-		return err
+		return fmt.Errorf("failed to request pseudo terminal: %v", err)
 	}
-	return session.Shell()
+	if err := session.Shell(); err != nil {
+		return fmt.Errorf("failed to start remote shell: %v", err)
+	}
+	return nil
 }
