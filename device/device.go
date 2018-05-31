@@ -93,7 +93,7 @@ func (d *Device) SendCmds(cmds ...string) ([]byte, error) {
 
 	// Write the commands to stdin
 	for _, cmd := range cmds {
-		if _, err := io.WriteString(stdin, cmd+"\n"); err != nil {
+		if _, err := stdin.Write([]byte(cmd + "\n")); err != nil {
 			return nil, fmt.Errorf("failed to run: %v", err)
 		}
 	}
