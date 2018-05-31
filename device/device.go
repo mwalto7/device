@@ -100,9 +100,9 @@ func (d *Device) SendCmds(cmds ...string) ([]byte, error) {
 
 	// Wait for remote commands to exit or timeout.
 	exit := make(chan error, 1)
-	go func() {
+	go func(exit chan<- error) {
 		exit <- session.Wait()
-	}()
+	}(exit)
 	timeout := time.After(10 * time.Second)
 	for {
 		select {
