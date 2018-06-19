@@ -103,7 +103,7 @@ func (d *Device) SendCmds(cmds ...string) ([]byte, error) {
 	go func(exit chan<- error) {
 		exit <- session.Wait()
 	}(exit)
-	timeout := time.After(1 * time.Minute)
+	timeout := time.After(30 * time.Second)
 	for {
 		select {
 		case <-exit:
