@@ -48,7 +48,7 @@ func Dial(host, port, user, password string) (*Device, error) {
 		User:            user,
 		Auth:            []ssh.AuthMethod{ssh.Password(password)},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         5 * time.Second,
+		Timeout:         10 * time.Second,
 	}
 
 	// Set the defaults for the client configuration and
@@ -103,7 +103,7 @@ func (d *Device) SendCmds(cmds ...string) ([]byte, error) {
 	go func(exit chan<- error) {
 		exit <- session.Wait()
 	}(exit)
-	timeout := time.After(10 * time.Second)
+	timeout := time.After(1 * time.Minute)
 	for {
 		select {
 		case <-exit:
