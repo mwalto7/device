@@ -26,129 +26,191 @@ package device
 
 import (
 	"fmt"
+	"github.com/pkg/errors"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/knownhosts"
+	"golang.org/x/crypto/ssh/terminal"
 	"io"
 	"io/ioutil"
-	"net"
+	"os"
 	"time"
 )
 
-// Device represents a network device that can be
-// configured over SSH.
+var TimeoutError = errors.New("session timed out")
+
+// Device represents an SSH client.
 type Device struct {
-	*ssh.Client // the underlying SSH client
+	*ssh.Client
 }
 
-// Dial returns an SSH client connection to the specified
-// host using password authentication. If a connection
-// is not established within 5 seconds, Dial will timeout.
-func Dial(host, port, user, password string) (*Device, error) {
-	// Initialize the client configuration.
-	config := &ssh.ClientConfig{
-		User:            user,
-		Auth:            []ssh.AuthMethod{ssh.Password(password)},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         10 * time.Second,
-	}
-
-	// Set the defaults for the client configuration and
-	// append supported ciphers for older Cisco and HP
-	// devices.
-	config.SetDefaults()
-	config.Ciphers = append(config.Ciphers, "aes128-cbc", "3des-cbc", "aes192-cbc", "aes256-cbc")
-
-	// Establish an SSH connection to the device.
-	client, err := ssh.Dial("tcp", net.JoinHostPort(host, port), config)
+// Dial creates a client connection to a remote device.
+func Dial(addr string, config *ssh.ClientConfig) (*Device, error) {
+	client, err := ssh.Dial("tcp", addr, config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to dial: %v", err)
+		return nil, errors.Wrap(err, "failed to dial")
 	}
 	return &Device{client}, nil
 }
 
-// SendCmds starts an SSH session, writes `cmds` to its
-// standard input, waits for the remote commands to exit,
-// then returns the contents of standard output and
-// standard error.  If the remote commands wait for more
-// than 10 seconds, the session will be terminated.
-// SendCmds is safe to use concurrently.
-func (d *Device) SendCmds(cmds ...string) ([]byte, error) {
-	// Create a new session
+// Run creates a new session, starts a remote shell, and runs the
+// specified commands. The combined output of the remote shell's standard
+// output and standard error is returned.
+func (d *Device) Run(cmds ...string) ([]byte, error) {
 	session, err := d.NewSession()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create session: %v", err)
+		return nil, errors.Wrap(err, "failed to create session")
 	}
 	defer session.Close()
 
-	// Create pipes to stdin, stdout, and stderr
-	stdin, stdout, stderr, err := setIO(session)
+	stdin, stdout, stderr, err := pipeIO(session)
 	if err != nil {
-		return nil, fmt.Errorf("failed to setup IO: %v", err)
+		return nil, err
 	}
 	defer stdin.Close()
 
-	// Start the remote shell
-	if err := startShell(session); err != nil {
-		return nil, err
+	if err := session.Shell(); err != nil {
+		return nil, errors.Wrap(err, "failed to start remote shell")
 	}
-
-	// Write the commands to stdin
 	for _, cmd := range cmds {
-		if _, err := stdin.Write([]byte(cmd + "\n")); err != nil {
-			return nil, fmt.Errorf("failed to run: %v", err)
+		if _, err := io.WriteString(stdin, fmt.Sprintf("%s\n", cmd)); err != nil {
+			return nil, errors.Wrapf(err, "failed to run %q", cmd)
 		}
 	}
-
-	// Wait for remote commands to exit or timeout.
-	exit := make(chan error, 1)
-	go func(exit chan<- error) {
-		exit <- session.Wait()
-	}(exit)
-	timeout := time.After(30 * time.Second)
-	for {
-		select {
-		case <-exit:
-			// TODO: Handle error value of exit channel.
-			return ioutil.ReadAll(io.MultiReader(stdout, stderr))
-		case <-timeout:
-			return nil, fmt.Errorf("session timed out")
+	wait := make(chan error, 1)
+	go func(wait chan<- error) {
+		wait <- session.Wait()
+	}(wait)
+	select {
+	case <-wait:
+		// TODO: Handle error value returned from `wait`.
+		// TODO: Consider returning the output of stdout and stderr if an error occurs.
+		//
+		// if waitErr != nil {
+		//     switch exitErr := waitErr.(type) {
+		//	   case *ssh.ExitError:
+		//         // TODO: Handle exit error.
+		//	   case *ssh.ExitMissingError:
+		//         // TODO: Handle missing exit error.
+		//	   default:
+		//		   return nil, exitErr
+		//     }
+		// }
+		output, err := ioutil.ReadAll(io.MultiReader(stdout, stderr))
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to read stdout and stderr")
 		}
+		return output, nil
+	case <-time.After(5 * time.Second):
+		return nil, TimeoutError
 	}
 }
 
-// Close closes the SSH client connection.
-func (d *Device) Close() error {
-	return d.Client.Close()
-}
-
-// setIO returns pipes connected to the remote shell's standard
-// input, standard output, and standard error.
-func setIO(session *ssh.Session) (stdin io.WriteCloser, stdout, stderr io.Reader, err error) {
+// pipeIO creates pipes a remote shell's standard input, standard output,
+// and standard error.
+func pipeIO(session *ssh.Session) (stdin io.WriteCloser, stdout, stderr io.Reader, err error) {
 	stdin, err = session.StdinPipe()
 	if err != nil {
-		return
+		return nil, nil, nil, errors.Wrap(err, "failed to create pipe to stdin")
 	}
 	stdout, err = session.StdoutPipe()
 	if err != nil {
-		return
+		return nil, nil, nil, errors.Wrap(err, "failed to create pipe to stdout")
 	}
 	stderr, err = session.StderrPipe()
 	if err != nil {
-		return
+		return nil, nil, nil, errors.Wrap(err, "failed to create pipe to stderr")
 	}
 	return
 }
 
-// startShell requests a pseudo terminal and starts the remote shell.
-func startShell(session *ssh.Session) error {
-	if err := session.RequestPty("vt100", 0, 0, ssh.TerminalModes{
-		ssh.ECHO:          0,     // disable echoing
-		ssh.TTY_OP_ISPEED: 14400, // input speed: 14.4k baud
-		ssh.TTY_OP_OSPEED: 14400, // output speed: 14.4k baud
-	}); err != nil {
-		return fmt.Errorf("failed to request pseudo terminal: %v", err)
+var NoAuthMethodsError = errors.New("no authentication methods specified")
+
+// NewClientConfig is a convenience function for configuring the SSH client.
+// At least one authentication method must be specified. By default the
+// configuration accepts all host connections, but it is recommended to use
+// the `AllowKnownHosts` Option.
+func NewClientConfig(user string, opts ...Option) (*ssh.ClientConfig, error) {
+	config := &ssh.ClientConfig{
+		User:            user,
+		Auth:            []ssh.AuthMethod{},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
-	if err := session.Shell(); err != nil {
-		return fmt.Errorf("failed to start remote shell: %v", err)
+	for _, opt := range opts {
+		if err := opt(config); err != nil {
+			return nil, err
+		}
 	}
-	return nil
+	if len(config.Auth) == 0 {
+		return nil, NoAuthMethodsError
+	}
+	return config, nil
+}
+
+// Option defines a function used to set the fields of a client configuration.
+type Option func(*ssh.ClientConfig) error
+
+// Password adds password authentication method to a client configuration.
+func Password(password string) Option {
+	return func(config *ssh.ClientConfig) error {
+		if password == "" {
+			fmt.Fprint(os.Stderr, "Password: ")
+			pass, err := terminal.ReadPassword(int(os.Stdin.Fd()))
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(os.Stderr)
+			password = string(pass)
+		}
+		config.Auth = append(config.Auth, ssh.Password(password))
+		return nil
+	}
+}
+
+// PrivateKey adds public key authentication method to a client configuration.
+func PrivateKey(privateKeys ...string) Option {
+	return func(config *ssh.ClientConfig) error {
+		var signers []ssh.Signer
+		for _, privateKey := range privateKeys {
+			key, err := ioutil.ReadFile(privateKey)
+			if err != nil {
+				return errors.Wrap(err, "unable to read private key")
+			}
+			signer, err := ssh.ParsePrivateKey(key)
+			if err != nil {
+				return errors.Wrap(err, "unable to parse private key")
+			}
+			signers = append(signers, signer)
+		}
+		config.Auth = append(config.Auth, ssh.PublicKeys(signers...))
+		return nil
+	}
+}
+
+// AllowKnowHosts allows connecting only to hosts in the local known_hosts file.
+func AllowKnowHosts(knownHosts string) Option {
+	return func(config *ssh.ClientConfig) error {
+		callback, err := knownhosts.New(knownHosts)
+		if err != nil {
+			return err
+		}
+		config.HostKeyCallback = callback
+		return nil
+	}
+}
+
+// Timeout sets the timeout duration for connecting to a remote host.
+func Timeout(d time.Duration) Option {
+	return func(config *ssh.ClientConfig) error {
+		config.Timeout = d
+		return nil
+	}
+}
+
+// Ciphers appends the specified ciphers to a client configuration.
+func Ciphers(ciphers ...string) Option {
+	return func(config *ssh.ClientConfig) error {
+		config.SetDefaults()
+		config.Ciphers = append(config.Ciphers, ciphers...)
+		return nil
+	}
 }

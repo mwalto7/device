@@ -23,45 +23,60 @@
 package device_test
 
 import (
-	"testing"
-	"log"
 	"fmt"
-	"github.com/mwalto7/device/device"
+	"github.com/mwalto7/netconfig/device"
+	"log"
+	"net"
+	"time"
 )
 
-func TestDial(t *testing.T) {
-	// TODO: Test the Dial function.
-}
-
-func TestDevice_SendCmds(t *testing.T) {
-	// TODO: Test the Device.SendCmds method.
-}
-
-func TestDevice_Close(t *testing.T) {
-	// TODO: Test the Device.Close method.
-}
-
-func BenchmarkDial(b *testing.B) {
-	// TODO: Benchmark Dial function.
-}
-
-func BenchmarkDevice_SendCmds(b *testing.B) {
-	// TODO: Benchmark Device.SendCmds method.
-}
-
-func ExampleDevice_SendCmds() {
-	// Establish an SSH connection to a network device.
-	netdev, err := device.Dial("127.0.0.1", "22", "user", "password")
+func ExampleDevice_Run() {
+	// Create a new client configuration.
+	config, err := device.NewClientConfig("user", device.Password("password"))
 	if err != nil {
-		log.Fatalf("Failed to connect: %v\n", err)
+		log.Fatal(err)
+	}
+
+	// Establish a client connection to a host and defer closing the connection.
+	netdev, err := device.Dial(net.JoinHostPort("host", "port"), config)
+	if err != nil {
+		log.Fatal(err)
 	}
 	defer netdev.Close()
 
-	// Send configuration commands and capture the output.
-	cmds := []string{"conf t", "int Gi1/0/1", "description hello_world", "exit", "exit"}
-	output, err := netdev.SendCmds(cmds...)
+	// Run the commands and capture the session output.
+	var cmds []string
+	output, err := netdev.Run(cmds...)
 	if err != nil {
-		log.Fatalf("Failed to run: %v\n", err)
+		log.Fatal(err)
 	}
 	fmt.Println(string(output))
+}
+
+func ExampleNewClientConfig() {
+	// Example client configuration that specifies public key and password
+	// authentication methods and allows only connections to known hosts.
+	config, err := device.NewClientConfig(
+		// Username for device login
+		"user",
+
+		// Only connect to hosts in known_hosts
+		device.AllowKnowHosts("~/.ssh/known_hosts"),
+
+		// Use key authentication
+		device.PrivateKey("~/.ssh/id_rsa"),
+
+		// Use password authentication as backup.
+		device.Password("password"),
+
+		// Timeout if establishing the connection exceeds the duration
+		device.Timeout(5*time.Second),
+
+		// Add additional ciphers supported by this device
+		device.Ciphers("aes128-cbc", "3des-cbc", "aes192-cbc", "aes256-cbc"),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	device.Dial("addr", config)
 }
