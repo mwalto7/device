@@ -16,21 +16,35 @@ import (
     "github.com/mwalto7/device/device"
     "io/ioutil"
     "log"
+    "net"
+    "time"
 )
 
 func main() {
-    // Establish an SSH connection to a network device.
-    netdev, err := device.Dial("127.0.0.1", "22", "user", "password")
+    // Create a new client configuration.
+    config, err := device.NewClientConfig(
+    	"user",
+    	device.PrivateKey("~/.ssh/id_rsa"),
+    	device.Password("password"),
+    	device.AllowKnowHosts("~/.ssh/known_hosts"),
+    	device.Timeout(5 * time.Second),
+    )
     if err != nil {
-        log.Fatalf("Failed to connect: %v\n", err)
+        log.Fatal(err)
+    }
+    
+    // Establish a client connection to a host and defer closing the connection.
+    netdev, err := device.Dial(net.JoinHostPort("host", "port"), config)
+    if err != nil {
+        log.Fatal(err)
     }
     defer netdev.Close()
-
-    // Send configuration commands and capture the output.
-    cmds := []string{"conf t", "int Gi1/0/1", "description hello_world", "exit", "exit"}
-    output, err := netdev.SendCmds(cmds...)
-    if err != nil {
-        log.Fatalf("Failed to run: %v\n", err)
+    
+    // Run the commands and capture the session output.
+    var cmds []string
+    output, err := netdev.Run(cmds...)
+        if err != nil {
+        log.Fatal(err)
     }
     fmt.Println(string(output))
 }
